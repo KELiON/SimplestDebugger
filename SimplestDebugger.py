@@ -1,16 +1,25 @@
-import sublime, sublimeplugin
+import sublime, sublime_plugin, re
 
-# Extends TextCommand so that run() receives a View to modify.
-class SimplestDebuggerCommand(sublimeplugin.TextCommand):
-  def run(self, view, args):
-    # Walk through each region in the selection
-    for region in view.sel():
-      # Only interested in empty regions, otherwise they may span multiple
-      # lines, which doesn't make sense for this command.
+class SimplestDebuggerCommand(sublime_plugin.TextCommand):
+  def run(self, edit):
+    selections = []
+    for region in self.view.sel():
       if region.empty():
-        # Expand the region to the full line it resides on, excluding the newline
-        line = view.line(region)
-        # Extract the string for the line, and add a newline
-        lineContents = view.substr(line) + '\n'
-        # Add the text at the beginning of the line
-        view.insert(line.begin(), lineContents)
+        line = self.view.line(region)
+        content = re.compile("([\s\t]*)(.*)[\s\t]*").split(self.view.substr(line))
+        if content[2] == 'debugger;':
+          # remove debugger line
+          # taken from "delete line" macros
+          self.view.run_command("expand_selection", {"to": 'line'})
+          self.view.run_command("add_to_kill_ring", {"forward": 'true'})
+          self.view.run_command("left_delete")
+        else:
+          # add debugger line
+          self.view.insert(edit, line.begin(), content[1]+'debugger;\n')
+        # save start of debugger line for later selections
+        point = line.begin() + content[1].__len__()
+        selections.append(sublime.Region(point, point))
+    # set selections to start of lines
+    self.view.sel().clear()
+    for sel in selections:
+      self.view.sel().add(sel)
